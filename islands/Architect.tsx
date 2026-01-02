@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
-import { Check, Copy, Server, Terminal, Globe, Loader2 } from "lucide-preact";
+// 修改点：直接使用完整 URL，防止 deno.json 配置失效导致的“按钮点击无反应”
+import { Check, Copy, Server, Terminal, Globe, Loader2 } from "https://esm.sh/lucide-preact@0.300.0";
 
-// 定义数据结构
 type TechStack = {
   id: string;
   name: string;
@@ -16,48 +16,64 @@ export default function Architect() {
   const [step, setStep] = useState<number>(1);
   const [idea, setIdea] = useState("");
   const [loading, setLoading] = useState(false);
-  
-  // 这里将存储 AI 返回的真实方案
   const [options, setOptions] = useState<TechStack[]>([]);
   const [selectedStack, setSelectedStack] = useState<TechStack | null>(null);
   const [finalPrompt, setFinalPrompt] = useState("");
 
-  // 1. 调用后端 API 分析需求
   const handleAnalyze = async () => {
-    if (!idea.trim()) return;
+    if (!idea.trim()) {
+        alert("请先输入你的创意！");
+        return;
+    }
+    
     setLoading(true);
-    setSelectedStack(null); // 重置选择
+    // 立即清除之前的选择，防止混淆
+    setSelectedStack(null); 
+    setOptions([]);
 
     try {
+      console.log("正在请求后端..."); // 方便你在 F12 控制台查看
       const res = await fetch("/api/ai", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idea }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "请求失败");
+        throw new Error(data.error || `请求失败 (${res.status})`);
       }
 
-      const data = await res.json();
-      
-      // 容错处理：确保返回的是 options 数组
-      if (data.options && Array.isArray(data.options)) {
-        setOptions(data.options);
+      // 容错处理：有时 AI 会把 options 包在 json 根目录下，有时直接返回数组
+      // 这里做个自动判断
+      let resultOptions = [];
+      if (Array.isArray(data.options)) {
+        resultOptions = data.options;
+      } else if (data.result && Array.isArray(data.result.options)) {
+        resultOptions = data.result.options;
+      } else if (typeof data === 'object' && data !== null) {
+         // 尝试寻找任何看起来像数组的字段
+         const possibleKey = Object.keys(data).find(k => Array.isArray(data[k]));
+         if (possibleKey) resultOptions = data[possibleKey];
+      }
+
+      if (resultOptions.length > 0) {
+        setOptions(resultOptions);
         setStep(2);
       } else {
-        alert("AI 返回格式异常，请重试");
-        console.error("数据格式不对:", data);
+        console.error("AI 返回数据格式异常:", data);
+        alert("AI 返回的数据格式不对，请重试一下。\n(已在控制台打印详细信息)");
       }
 
     } catch (err) {
-      alert("分析出错: " + err.message);
+      console.error(err);
+      alert("分析出错了: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. 生成最终 Prompt (纯前端拼接即可，无需再调 AI)
   const handleGenerate = () => {
     if (!selectedStack) return;
     setLoading(true);
@@ -75,14 +91,13 @@ Build a web application based on this requirement: "${idea}"
 - Database: ${selectedStack.db}
 - Deployment: ${selectedStack.deploy}
 
-# Instructions for Cursor / Windsurf
-1. Initialize the project structure strictly following best practices for ${selectedStack.frontend}.
-2. Create a '.cursorrules' file to guide the AI editor with coding standards.
+# Instructions
+1. Initialize the project structure strictly following best practices.
+2. Create a '.cursorrules' file.
 3. Generate the database schema for ${selectedStack.db}.
 4. Provide a step-by-step implementation guide.
     `.trim();
 
-    // 模拟一点生成等待感
     setTimeout(() => {
       setFinalPrompt(prompt);
       setLoading(false);
@@ -101,29 +116,29 @@ Build a web application based on this requirement: "${idea}"
         ))}
       </div>
 
-      {/* STEP 1: 输入 */}
+      {/* STEP 1 */}
       {step === 1 && (
-        <div class="animate-in fade-in slide-in-from-bottom-2 duration-300">
+        <div class="animate-in fade-in">
           <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><Globe size={20}/> 你的创意是什么？</h2>
           <textarea 
             class="w-full h-32 p-4 border rounded-xl focus:ring-2 focus:ring-black focus:outline-none resize-none text-lg"
-            placeholder="例如：开发一个基于 Deno 的个人博客系统，支持 Markdown..."
+            placeholder="例如：开发一个基于 Deno 的个人博客系统..."
             value={idea}
             onInput={(e) => setIdea((e.target as HTMLTextAreaElement).value)}
           />
           <button 
             onClick={handleAnalyze} 
-            disabled={loading || !idea} 
+            disabled={loading} 
             class="w-full mt-4 bg-black text-white py-4 rounded-xl font-medium hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {loading ? <><Loader2 class="animate-spin"/> AI 正在思考 (gemini-3)...</> : "开始规划架构"}
+            {loading ? <><Loader2 class="animate-spin"/> AI 正在思考...</> : "开始规划架构"}
           </button>
         </div>
       )}
 
-      {/* STEP 2: 选择方案 */}
+      {/* STEP 2 */}
       {step === 2 && (
-        <div class="animate-in fade-in slide-in-from-bottom-2 duration-300">
+        <div class="animate-in fade-in">
           <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><Server size={20}/> AI 推荐方案</h2>
           <div class="grid gap-4">
             {options.map((opt) => (
@@ -139,7 +154,6 @@ Build a web application based on this requirement: "${idea}"
                 <p class="text-gray-600 mb-3 text-sm">{opt.desc}</p>
                 <div class="flex flex-wrap gap-2 text-xs font-mono text-gray-500">
                     <span class="bg-white border px-2 py-1 rounded">{opt.frontend}</span>
-                    <span class="bg-white border px-2 py-1 rounded">{opt.backend}</span>
                     <span class="bg-white border px-2 py-1 rounded">{opt.deploy}</span>
                 </div>
               </div>
@@ -158,16 +172,16 @@ Build a web application based on this requirement: "${idea}"
         </div>
       )}
 
-      {/* STEP 3: 结果 */}
+      {/* STEP 3 */}
       {step === 3 && (
-        <div class="animate-in fade-in slide-in-from-bottom-2 duration-300">
+        <div class="animate-in fade-in">
             <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><Terminal size={20}/> 开发指令已就绪</h2>
             <div class="bg-[#1e1e1e] text-gray-200 p-5 rounded-xl h-64 overflow-y-auto text-sm font-mono leading-relaxed border border-gray-700 shadow-inner">
                 <pre class="whitespace-pre-wrap">{finalPrompt}</pre>
             </div>
             <button 
-                onClick={() => {navigator.clipboard.writeText(finalPrompt); alert("已复制到剪贴板！")}} 
-                class="w-full mt-4 bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-200"
+                onClick={() => {navigator.clipboard.writeText(finalPrompt); alert("已复制！")}} 
+                class="w-full mt-4 bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2"
             >
                 <Copy size={18}/> 一键复制
             </button>
