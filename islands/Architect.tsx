@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
-import { Check, ChevronRight, Copy, Server, Terminal, Globe, Database, Cpu, Code2 } from "lucide-preact";
+import { Check, Copy, Server, Terminal, Globe, Loader2 } from "lucide-preact";
 
+// 定义数据结构
 type TechStack = {
   id: string;
   name: string;
@@ -11,147 +12,168 @@ type TechStack = {
   deploy: string;
 };
 
-const MOCK_OPTIONS: TechStack[] = [
-  {
-    id: "speed",
-    name: "极速 MVP 方案",
-    desc: "利用 Deno 全球边缘计算，最快速度上线验证想法。",
-    frontend: "Fresh (Preact)",
-    backend: "Deno Standard Lib",
-    db: "Deno KV",
-    deploy: "Deno Deploy",
-  },
-  {
-    id: "standard",
-    name: "标准全栈方案",
-    desc: "适合中大型应用，生态成熟，易于扩展。",
-    frontend: "React + Vite",
-    backend: "NestJS / Express",
-    db: "PostgreSQL",
-    deploy: "Docker / Railway",
-  },
-  {
-    id: "serverless",
-    name: "轻量 Serverless",
-    desc: "低成本，按量付费，适合工具类应用。",
-    frontend: "Vue 3",
-    backend: "Cloudflare Workers",
-    db: "Supabase",
-    deploy: "Cloudflare Pages",
-  },
-];
-
 export default function Architect() {
   const [step, setStep] = useState<number>(1);
   const [idea, setIdea] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  // 这里将存储 AI 返回的真实方案
+  const [options, setOptions] = useState<TechStack[]>([]);
   const [selectedStack, setSelectedStack] = useState<TechStack | null>(null);
   const [finalPrompt, setFinalPrompt] = useState("");
 
+  // 1. 调用后端 API 分析需求
   const handleAnalyze = async () => {
     if (!idea.trim()) return;
     setLoading(true);
-    // 这里模拟请求后端
-    setTimeout(() => {
-        setLoading(false);
+    setSelectedStack(null); // 重置选择
+
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        body: JSON.stringify({ idea }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "请求失败");
+      }
+
+      const data = await res.json();
+      
+      // 容错处理：确保返回的是 options 数组
+      if (data.options && Array.isArray(data.options)) {
+        setOptions(data.options);
         setStep(2);
-    }, 1000);
+      } else {
+        alert("AI 返回格式异常，请重试");
+        console.error("数据格式不对:", data);
+      }
+
+    } catch (err) {
+      alert("分析出错: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // 2. 生成最终 Prompt (纯前端拼接即可，无需再调 AI)
   const handleGenerate = () => {
     if (!selectedStack) return;
     setLoading(true);
     
-    // 生成 Prompt 逻辑
     const prompt = `
 # Role
-You are a Tech Lead expert in ${selectedStack.frontend} and ${selectedStack.backend}.
+You are a Senior Tech Lead expert in ${selectedStack.frontend} and ${selectedStack.backend}.
 
-# Goal
-Build a web app based on: "${idea}"
+# Project Goal
+Build a web application based on this requirement: "${idea}"
 
-# Tech Stack
+# Selected Tech Stack
 - Frontend: ${selectedStack.frontend}
 - Backend: ${selectedStack.backend}
 - Database: ${selectedStack.db}
-- Deploy: ${selectedStack.deploy}
+- Deployment: ${selectedStack.deploy}
 
-# Instructions
-1. Initialize the project structure.
-2. Create specific config files for ${selectedStack.deploy}.
-3. Write the initial boilerplate code.
+# Instructions for Cursor / Windsurf
+1. Initialize the project structure strictly following best practices for ${selectedStack.frontend}.
+2. Create a '.cursorrules' file to guide the AI editor with coding standards.
+3. Generate the database schema for ${selectedStack.db}.
+4. Provide a step-by-step implementation guide.
     `.trim();
 
+    // 模拟一点生成等待感
     setTimeout(() => {
       setFinalPrompt(prompt);
       setLoading(false);
       setStep(3);
-    }, 800);
+    }, 600);
   };
 
   return (
-    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200 max-w-2xl mx-auto mt-10">
-      {/* 步骤条 */}
-      <div class="flex gap-2 mb-8 justify-center">
-        {[1, 2, 3].map(s => (
-            <div key={s} class={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${step >= s ? 'bg-black text-white' : 'bg-gray-200 text-gray-500'}`}>
-                {s}
-            </div>
+    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200 max-w-3xl mx-auto mt-6">
+      {/* 步骤指示器 */}
+      <div class="flex items-center justify-center gap-4 mb-8">
+        {[1, 2, 3].map((s) => (
+          <div key={s} class={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step >= s ? 'bg-black text-white' : 'bg-gray-100 text-gray-400'}`}>
+            {s}
+          </div>
         ))}
       </div>
 
+      {/* STEP 1: 输入 */}
       {step === 1 && (
-        <div class="space-y-4">
-          <h2 class="text-xl font-bold flex items-center gap-2"><Globe size={20}/> 你的创意是什么？</h2>
+        <div class="animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><Globe size={20}/> 你的创意是什么？</h2>
           <textarea 
-            class="w-full h-32 p-3 border rounded-lg focus:ring-2 focus:ring-black focus:outline-none"
-            placeholder="我想做一个..."
+            class="w-full h-32 p-4 border rounded-xl focus:ring-2 focus:ring-black focus:outline-none resize-none text-lg"
+            placeholder="例如：开发一个基于 Deno 的个人博客系统，支持 Markdown..."
             value={idea}
             onInput={(e) => setIdea((e.target as HTMLTextAreaElement).value)}
           />
-          <button onClick={handleAnalyze} disabled={loading || !idea} class="w-full bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50">
-            {loading ? "分析中..." : "开始规划架构"}
+          <button 
+            onClick={handleAnalyze} 
+            disabled={loading || !idea} 
+            class="w-full mt-4 bg-black text-white py-4 rounded-xl font-medium hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {loading ? <><Loader2 class="animate-spin"/> AI 正在思考 (gemini-3)...</> : "开始规划架构"}
           </button>
         </div>
       )}
 
+      {/* STEP 2: 选择方案 */}
       {step === 2 && (
-        <div class="space-y-4">
-          <h2 class="text-xl font-bold flex items-center gap-2"><Server size={20}/> 选择技术方案</h2>
-          <div class="grid gap-3">
-            {MOCK_OPTIONS.map(opt => (
-                <div key={opt.id} onClick={() => setSelectedStack(opt)} class={`p-4 border-2 rounded-lg cursor-pointer transition-all ${selectedStack?.id === opt.id ? 'border-black bg-gray-50' : 'border-gray-100'}`}>
-                    <div class="flex justify-between font-bold">
-                        {opt.name}
-                        {selectedStack?.id === opt.id && <Check size={18}/>}
-                    </div>
-                    <p class="text-sm text-gray-500 mt-1">{opt.desc}</p>
-                    <div class="mt-2 flex gap-2 text-xs text-gray-600">
-                        <span class="bg-white border px-1 rounded">{opt.frontend}</span>
-                        <span class="bg-white border px-1 rounded">{opt.deploy}</span>
-                    </div>
+        <div class="animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><Server size={20}/> AI 推荐方案</h2>
+          <div class="grid gap-4">
+            {options.map((opt) => (
+              <div 
+                key={opt.id} 
+                onClick={() => setSelectedStack(opt)} 
+                class={`p-5 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${selectedStack?.id === opt.id ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-100 hover:border-gray-300'}`}
+              >
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="font-bold text-lg">{opt.name}</h3>
+                    {selectedStack?.id === opt.id && <Check class="text-green-600" />}
                 </div>
+                <p class="text-gray-600 mb-3 text-sm">{opt.desc}</p>
+                <div class="flex flex-wrap gap-2 text-xs font-mono text-gray-500">
+                    <span class="bg-white border px-2 py-1 rounded">{opt.frontend}</span>
+                    <span class="bg-white border px-2 py-1 rounded">{opt.backend}</span>
+                    <span class="bg-white border px-2 py-1 rounded">{opt.deploy}</span>
+                </div>
+              </div>
             ))}
           </div>
-          <div class="flex gap-3 mt-4">
-             <button onClick={() => setStep(1)} class="px-4 py-2 text-gray-500">上一步</button>
-             <button onClick={handleGenerate} disabled={!selectedStack || loading} class="flex-1 bg-black text-white py-3 rounded-lg disabled:opacity-50">
-                {loading ? "生成中..." : "生成 Cursor 提示词"}
+          <div class="flex gap-4 mt-6">
+             <button onClick={() => setStep(1)} class="px-6 py-3 text-gray-500 font-medium hover:bg-gray-50 rounded-lg">上一步</button>
+             <button 
+                onClick={handleGenerate} 
+                disabled={!selectedStack || loading} 
+                class="flex-1 bg-black text-white py-3 rounded-xl font-medium hover:bg-gray-800 disabled:opacity-50 flex justify-center"
+             >
+                {loading ? <Loader2 class="animate-spin"/> : "生成开发指令"}
              </button>
           </div>
         </div>
       )}
 
+      {/* STEP 3: 结果 */}
       {step === 3 && (
-        <div class="space-y-4">
-            <h2 class="text-xl font-bold flex items-center gap-2"><Terminal size={20}/> 你的开发指令</h2>
-            <div class="bg-gray-900 text-gray-100 p-4 rounded-lg h-48 overflow-y-auto text-xs font-mono">
+        <div class="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><Terminal size={20}/> 开发指令已就绪</h2>
+            <div class="bg-[#1e1e1e] text-gray-200 p-5 rounded-xl h-64 overflow-y-auto text-sm font-mono leading-relaxed border border-gray-700 shadow-inner">
                 <pre class="whitespace-pre-wrap">{finalPrompt}</pre>
             </div>
-            <button onClick={() => {navigator.clipboard.writeText(finalPrompt); alert("已复制")}} class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg flex items-center justify-center gap-2">
-                <Copy size={16}/> 复制内容
+            <button 
+                onClick={() => {navigator.clipboard.writeText(finalPrompt); alert("已复制到剪贴板！")}} 
+                class="w-full mt-4 bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-200"
+            >
+                <Copy size={18}/> 一键复制
             </button>
-            <button onClick={() => setStep(1)} class="w-full text-center text-gray-400 text-sm mt-2">重置</button>
+            <button onClick={() => {setStep(1); setIdea(''); setSelectedStack(null)}} class="w-full text-center text-gray-400 text-sm mt-4 hover:text-black">
+                开始新项目
+            </button>
         </div>
       )}
     </div>
