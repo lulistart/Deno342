@@ -1,5 +1,4 @@
 import { useState } from "preact/hooks";
-// 修改点：直接使用完整 URL，防止 deno.json 配置失效导致的“按钮点击无反应”
 import { Check, Copy, Server, Terminal, Globe, Loader2 } from "https://esm.sh/lucide-preact@0.300.0";
 
 type TechStack = {
@@ -27,12 +26,10 @@ export default function Architect() {
     }
     
     setLoading(true);
-    // 立即清除之前的选择，防止混淆
     setSelectedStack(null); 
     setOptions([]);
 
     try {
-      console.log("正在请求后端..."); // 方便你在 F12 控制台查看
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -42,18 +39,18 @@ export default function Architect() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || `请求失败 (${res.status})`);
+        // 修改点：这里会把后端返回的 'details' 也显示出来
+        const errorMsg = data.details ? `${data.error}\n详情: ${data.details}` : data.error;
+        throw new Error(errorMsg || `请求失败 (${res.status})`);
       }
 
-      // 容错处理：有时 AI 会把 options 包在 json 根目录下，有时直接返回数组
-      // 这里做个自动判断
+      // 智能解析 JSON 结构
       let resultOptions = [];
       if (Array.isArray(data.options)) {
         resultOptions = data.options;
       } else if (data.result && Array.isArray(data.result.options)) {
         resultOptions = data.result.options;
       } else if (typeof data === 'object' && data !== null) {
-         // 尝试寻找任何看起来像数组的字段
          const possibleKey = Object.keys(data).find(k => Array.isArray(data[k]));
          if (possibleKey) resultOptions = data[possibleKey];
       }
@@ -62,13 +59,14 @@ export default function Architect() {
         setOptions(resultOptions);
         setStep(2);
       } else {
-        console.error("AI 返回数据格式异常:", data);
-        alert("AI 返回的数据格式不对，请重试一下。\n(已在控制台打印详细信息)");
+        console.error("数据异常:", data);
+        alert("AI 返回了数据，但找不到方案列表。\n请重试一次。");
       }
 
     } catch (err) {
       console.error(err);
-      alert("分析出错了: " + err.message);
+      // 修改点：弹窗显示完整错误信息
+      alert("出错了:\n" + err.message);
     } finally {
       setLoading(false);
     }
@@ -107,7 +105,6 @@ Build a web application based on this requirement: "${idea}"
 
   return (
     <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200 max-w-3xl mx-auto mt-6">
-      {/* 步骤指示器 */}
       <div class="flex items-center justify-center gap-4 mb-8">
         {[1, 2, 3].map((s) => (
           <div key={s} class={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step >= s ? 'bg-black text-white' : 'bg-gray-100 text-gray-400'}`}>
@@ -116,7 +113,6 @@ Build a web application based on this requirement: "${idea}"
         ))}
       </div>
 
-      {/* STEP 1 */}
       {step === 1 && (
         <div class="animate-in fade-in">
           <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><Globe size={20}/> 你的创意是什么？</h2>
@@ -131,12 +127,11 @@ Build a web application based on this requirement: "${idea}"
             disabled={loading} 
             class="w-full mt-4 bg-black text-white py-4 rounded-xl font-medium hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {loading ? <><Loader2 class="animate-spin"/> AI 正在思考...</> : "开始规划架构"}
+            {loading ? <><Loader2 class="animate-spin"/> AI 正在思考 (Gemini Flash)...</> : "开始规划架构"}
           </button>
         </div>
       )}
 
-      {/* STEP 2 */}
       {step === 2 && (
         <div class="animate-in fade-in">
           <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><Server size={20}/> AI 推荐方案</h2>
@@ -172,7 +167,6 @@ Build a web application based on this requirement: "${idea}"
         </div>
       )}
 
-      {/* STEP 3 */}
       {step === 3 && (
         <div class="animate-in fade-in">
             <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><Terminal size={20}/> 开发指令已就绪</h2>
